@@ -90,22 +90,7 @@ designation = st.sidebar.selectbox(
         "ASST. REGIONAL MANAGER"
     ]
 )
-# ---------------- DESIGNATION SELECTOR ----------------
-st.sidebar.markdown("## 👤 Select Designation")
 
-designation = st.sidebar.selectbox(
-    "Designation",
-    [
-        "HEAD RETAIL",
-        "Business Head L1",
-        "Business Head L2",
-        "GENERAL MANAGER (G1)",
-        "DEPUTY GENERAL MANAGER",
-        "REGIONAL MANAGER (L1)",
-        "REGIONAL MANAGER (L2)",
-        "ASST. REGIONAL MANAGER"
-    ]
-)
 
 store_count = st.slider("Number of Stores",1,20,10)
 
