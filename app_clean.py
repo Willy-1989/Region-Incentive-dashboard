@@ -46,7 +46,14 @@ for k,v in saved_data.items():
 
 # ---------------- SLABS ----------------
 slabs = {
-    "REGIONAL MANAGER (L1)": [(100,105000),(90,85000),(80,75000),(70,63000),(60,51000),(0,42000)]
+    "HEAD RETAIL": [(100,125000),(90,100000),(80,90000),(70,75000),(60,60000),(0,50000)],
+    "Business Head L1": [(100,125000),(90,100000),(80,90000),(70,75000),(60,60000),(0,50000)],
+    "Business Head L2": [(100,125000),(90,100000),(80,90000),(70,75000),(60,60000),(0,50000)],
+    "GENERAL MANAGER (G1)": [(100,105000),(90,85000),(80,75000),(70,63000),(60,51000),(0,42000)],
+    "DEPUTY GENERAL MANAGER": [(100,105000),(90,85000),(80,75000),(70,63000),(60,51000),(0,42000)],
+    "REGIONAL MANAGER (L1)": [(100,105000),(90,85000),(80,75000),(70,63000),(60,51000),(0,42000)],
+    "REGIONAL MANAGER (L2)": [(100,105000),(90,85000),(80,75000),(70,63000),(60,51000),(0,42000)],
+    "ASST. REGIONAL MANAGER": [(100,95000),(90,75000),(80,67500),(70,55000),(60,45000),(0,37500)]
 }
 
 # ---------------- MARK LOGIC ----------------
@@ -67,8 +74,39 @@ def calculate_marks(t, s, d, sc, dt):
 
 # ---------------- UI ----------------
 st.title("🏆 Region Intelligence Dashboard")
+# ---------------- DESIGNATION SELECTOR ----------------
+st.sidebar.markdown("## 👤 Select Designation")
 
-designation = "REGIONAL MANAGER (L1)"
+designation = st.sidebar.selectbox(
+    "Designation",
+    [
+        "HEAD RETAIL",
+        "Business Head L1",
+        "Business Head L2",
+        "GENERAL MANAGER (G1)",
+        "DEPUTY GENERAL MANAGER",
+        "REGIONAL MANAGER (L1)",
+        "REGIONAL MANAGER (L2)",
+        "ASST. REGIONAL MANAGER"
+    ]
+)
+# ---------------- DESIGNATION SELECTOR ----------------
+st.sidebar.markdown("## 👤 Select Designation")
+
+designation = st.sidebar.selectbox(
+    "Designation",
+    [
+        "HEAD RETAIL",
+        "Business Head L1",
+        "Business Head L2",
+        "GENERAL MANAGER (G1)",
+        "DEPUTY GENERAL MANAGER",
+        "REGIONAL MANAGER (L1)",
+        "REGIONAL MANAGER (L2)",
+        "ASST. REGIONAL MANAGER"
+    ]
+)
+
 store_count = st.slider("Number of Stores",1,20,10)
 
 total_marks = 0
