@@ -3,8 +3,21 @@ import json
 import os
 import itertools
 import matplotlib.pyplot as plt
+from streamlit_local_storage import LocalStorage
 
 st.set_page_config(layout="wide")
+
+# Initialize Local Storage FIRST
+local_storage = LocalStorage()
+
+# ---------------- LOAD FROM BROWSER ----------------
+stored_data = local_storage.getItem("region_data")
+
+if stored_data:
+    for key, value in stored_data.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
 # ---------------- GOLD PREMIUM THEME ----------------
 st.markdown("""
 <style>
@@ -282,3 +295,5 @@ with st.expander("📊 Contribution Ranking (Detailed View)"):
         contribution = round(s["mark"]/store_count,2)
         st.write(f"{s['name']} | Mark: {s['mark']} | Contribution: {contribution}")
 
+# ---------------- AUTO SAVE TO BROWSER ----------------
+local_storage.setItem("region_data", dict(st.session_state))
