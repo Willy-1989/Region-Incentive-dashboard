@@ -137,38 +137,47 @@ with col_left:
 
     if gap > 0:
         slab_targets = [75, 80, 90, 100]
+        priority_metrics = ["turnover", "scheme", "dtso", "studded", "dmd"]
+
         strategy_found = False
 
-        for r in [2,3]:
+        for r in [2, 3]:
             for combo in itertools.combinations(store_data, r):
 
                 improvement_total = 0
                 actions = []
 
                 for store in combo:
+
                     best_improvement = 0
                     best_action = None
 
-                    priority_metrics = ["turnover", "scheme", "dtso", "studded", "dmd"]
+                    for metric in priority_metrics:
 
-for metric in priority_metrics:
                         current = store[metric]
 
                         for target in slab_targets:
+
                             if target > current:
+
                                 new_mark = calculate_marks(
-                                    target if metric=="turnover" else store["turnover"],
-                                    target if metric=="studded" else store["studded"],
-                                    store["dmd"],
-                                    target if metric=="scheme" else store["scheme"],
-                                    target if metric=="dtso" else store["dtso"]
+                                    target if metric == "turnover" else store["turnover"],
+                                    target if metric == "studded" else store["studded"],
+                                    target if metric == "dmd" else store["dmd"],
+                                    target if metric == "scheme" else store["scheme"],
+                                    target if metric == "dtso" else store["dtso"],
                                 )
 
                                 improvement = new_mark - store["mark"]
 
                                 if improvement > best_improvement:
                                     best_improvement = improvement
-                                    best_action = (store["name"], metric.upper(), current, target)
+                                    best_action = (
+                                        store["name"],
+                                        metric.upper(),
+                                        current,
+                                        target,
+                                    )
 
                     if best_action:
                         improvement_total += best_improvement
@@ -180,21 +189,26 @@ for metric in priority_metrics:
                             f"{action[0]} improves {action[1]} "
                             f"{action[2]}% → {action[3]}%"
                         )
+
                     st.success("👉 Combined improvement unlocks next slab")
                     strategy_found = True
                     break
+
             if strategy_found:
                 break
 
         if not strategy_found:
-            st.warning("No 2-3 store combination sufficient. Structural uplift required.")
+            st.warning("No 2–3 store combination sufficient. Structural uplift required.")
+
     else:
         st.success("Highest slab achieved")
 
 
 with col_right:
     st.markdown("### 🔴 Top 3 Risk Stores")
+
     sorted_stores = sorted(store_data, key=lambda x: x["mark"])
+
     for s in sorted_stores[:3]:
         st.error(f"{s['name']} | {s['mark']}")
 
