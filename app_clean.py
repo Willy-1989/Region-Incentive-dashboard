@@ -149,7 +149,9 @@ with col_left:
                     best_improvement = 0
                     best_action = None
 
-                    for metric in ["turnover","studded","scheme","dtso"]:
+                    priority_metrics = ["turnover", "scheme", "dtso", "studded", "dmd"]
+
+for metric in priority_metrics:
                         current = store[metric]
 
                         for target in slab_targets:
