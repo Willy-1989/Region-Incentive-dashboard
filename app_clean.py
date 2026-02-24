@@ -20,29 +20,7 @@ div[data-testid="stMetric"] {
 </style>
 """, unsafe_allow_html=True)
 
-DATA_FILE = "saved_data.json"
 
-# ---------------- LOAD / SAVE ----------------
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
-
-def reset_data():
-    if os.path.exists(DATA_FILE):
-        os.remove(DATA_FILE)
-    st.session_state.clear()
-    st.experimental_rerun()
-
-saved_data = load_data()
-for k,v in saved_data.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
 
 # ---------------- SLABS ----------------
 slabs = {
@@ -288,7 +266,3 @@ with st.expander("📊 Contribution Ranking (Detailed View)"):
         contribution = round(s["mark"]/store_count,2)
         st.write(f"{s['name']} | Mark: {s['mark']} | Contribution: {contribution}")
 
-# ---------------- SAVE ----------------
-if st.button("Save Data"):
-    save_data(dict(st.session_state))
-    st.success("Saved")
