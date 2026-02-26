@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import itertools
+import pandas as pd # <--- ADD THIS LINE
 import matplotlib.pyplot as plt
 from streamlit_local_storage import LocalStorage
 
@@ -226,6 +227,64 @@ with col_right:
         st.error(f"{s['name']} | {s['mark']}")
 
 
+# ================= PROACTIVE MILESTONE MATRIX =================
+st.markdown("## 🎯 Proactive Store Milestones")
+st.write("This table shows the immediate next performance slab for every store and how much it reduces the regional gap.")
+
+if gap > 0:
+    table_rows = []
+    metrics = ["turnover", "studded", "dmd", "scheme", "dtso"]
+    display_names = ["Turnover", "Studded %", "DMD %", "Scheme %", "DTSO %"]
+    # These are your system's scoring milestones
+    milestones = [75, 80, 90, 100]
+
+    for store in store_data:
+        row = [store["name"]]
+        
+        for metric in metrics:
+            actual = store[metric]
+            row.append(f"{actual}%") # Show current Actual
+            
+            # Find the NEXT milestone above the current achievement
+            next_milestone = None
+            for m in milestones:
+                if m > actual:
+                    next_milestone = m
+                    break
+            
+            if next_milestone:
+                # Simulate the marks gained by hitting this next milestone
+                sim = {m: store[m] for m in metrics}
+                sim[metric] = next_milestone
+                new_mark = calculate_marks(sim["turnover"], sim["studded"], sim["dmd"], sim["scheme"], sim["dtso"])
+                gain = round(new_mark - store["mark"], 1)
+                
+                target_display = f"{next_milestone}% (+{gain} marks)"
+            else:
+                target_display = "Max Slab Reached"
+            
+            row.append(target_display)
+        
+        # Contribution to the current average
+        row.append(round(store["mark"] / store_count, 2))
+        table_rows.append(row)
+        
+    # Headers matching your manual design
+    top_level = ["Location Name"] + [item for sublist in [[m, m] for m in display_names] for item in sublist] + ["Contribution"]
+    sub_level = [" "] + ["Actual", "Next Milestone"] * 5 + ["to Region Avg"]
+    
+    col_tuples = list(zip(top_level, sub_level))
+    columns = pd.MultiIndex.from_tuples(col_tuples)
+    
+    df = pd.DataFrame(table_rows, columns=columns)
+    
+    # Display the interactive table
+    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.info(f"💡 Total regional marks needed to reach next slab: **{round(required_total, 2)}**")
+
+else:
+    st.success("🏆 Region is already at the highest slab!")
+
 # ================= PERFORMANCE INSIGHT =================
 st.markdown("## 📈 Performance Insight")
 
@@ -295,5 +354,8 @@ with st.expander("📊 Contribution Ranking (Detailed View)"):
         contribution = round(s["mark"]/store_count,2)
         st.write(f"{s['name']} | Mark: {s['mark']} | Contribution: {contribution}")
 
-# ---------------- AUTO SAVE TO BROWSER ----------------
-local_storage.setItem("region_data", dict(st.session_state))
+# ---------------- AUTO SAVE TO BROWSER (FIXED) ----------------
+# We filter the session state to only save data (strings, numbers, lists) 
+# and ignore complex system objects that cause the "Circular Reference" error.
+save_data = {k: v for k, v in st.session_state.items() if isinstance(v, (str, int, float, bool, list, dict))}
+local_storage.setItem("region_data", save_data)
