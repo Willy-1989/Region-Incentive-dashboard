@@ -11,12 +11,13 @@ st.set_page_config(layout="wide")
 # Initialize Local Storage FIRST
 local_storage = LocalStorage()
 
-# ---------------- LOAD FROM BROWSER ----------------
+# ---------------- LOAD FROM BROWSER (FIXED) ----------------
 stored_data = local_storage.getItem("region_data")
 
 if stored_data:
     for key, value in stored_data.items():
-        if key not in st.session_state:
+        # IMPORTANT: We ignore 'excel_editor' here to prevent the crash
+        if key not in st.session_state and key != "excel_editor":
             st.session_state[key] = value
 
 # ---------------- GOLD PREMIUM THEME ----------------
@@ -66,12 +67,13 @@ def calculate_marks(t, s, d, sc, dt):
 
 # ---------------- UI ----------------
 st.title("🏆 Region Intelligence Dashboard")
-# ---------------- DESIGNATION SELECTOR ----------------
-st.sidebar.markdown("## 👤 Select Designation")
+# ---------------- 👤 SIDEBAR CONFIGURATION ----------------
+st.sidebar.title("Region Settings")
 
+# This creates the dropdown menu for your role
 designation = st.sidebar.selectbox(
-    "Designation",
-    [
+    "Select Your Designation",
+    options=[
         "HEAD RETAIL",
         "Business Head L1",
         "Business Head L2",
@@ -83,33 +85,36 @@ designation = st.sidebar.selectbox(
     ]
 )
 
+# This sets the starting number of rows for your grid
+initial_rows = st.sidebar.slider("Starting Number of Stores", 1, 20, 10)
 
-store_count = st.slider("Number of Stores",1,20,10)
-
-total_marks = 0
-store_data = []
-
-# ================= NEW DATA ENTRY (EXCEL STYLE - SCALE FIXED) =================
+# ================= 📥 BULK DATA ENTRY (NEW & STABLE) =================
 st.markdown("## 📥 Bulk Data Entry")
-st.info("💡 You can copy rows from Excel (Cmd+C) and paste them directly into the first cell (Cmd+V).")
+st.info("💡 Pro-Tip: Copy your data from Excel (Cmd+C) and paste it into the first cell (Cmd+V).")
 
+
+
+# 2. Table Column Configuration
 column_config = {
     "Store Name": st.column_config.TextColumn("Store Name", default="New Store", required=True),
-    "Turnover %": st.column_config.NumberColumn("Turnover %", min_value=0.0, max_value=200.0, format="%.1f%%"),
-    "Studded %": st.column_config.NumberColumn("Studded %", min_value=0.0, max_value=200.0, format="%.1f%%"),
-    "DMD %": st.column_config.NumberColumn("DMD %", min_value=0.0, max_value=200.0, format="%.1f%%"),
-    "Scheme %": st.column_config.NumberColumn("Scheme %", min_value=0.0, max_value=200.0, format="%.1f%%"),
-    "DTSO %": st.column_config.NumberColumn("DTSO %", min_value=0.0, max_value=200.0, format="%.1f%%"),
+    "Turnover %": st.column_config.NumberColumn("Turnover %", format="%.2f"),
+    "Studded %": st.column_config.NumberColumn("Studded %", format="%.2f"), # Fix here
+    "DMD %": st.column_config.NumberColumn("DMD %", format="%.2f"),
+    "Scheme %": st.column_config.NumberColumn("Scheme %", format="%.2f"),
+    "DTSO %": st.column_config.NumberColumn("DTSO %", format="%.2f"), # Fix here
 }
 
-if 'input_df' not in st.session_state:
-    st.session_state.input_df = pd.DataFrame(
-        [{"Store Name": f"Store {i+1}", "Turnover %": 0.0, "Studded %": 0.0, "DMD %": 0.0, "Scheme %": 0.0, "DTSO %": 0.0} 
-         for i in range(store_count)]
-    )
+# 3. Load saved data or create fresh rows
+if 'saved_df_dict' not in st.session_state:
+    initial_data = [{"Store Name": f"Store {i+1}", "Turnover %": 0.0, "Studded %": 0.0, "DMD %": 0.0, "Scheme %": 0.0, "DTSO %": 0.0} 
+                    for i in range(initial_rows)]
+    st.session_state.saved_df_dict = initial_data
+else:
+    initial_data = st.session_state.saved_df_dict
 
+# 4. The Excel Grid (The Widget)
 edited_df = st.data_editor(
-    st.session_state.input_df,
+    initial_data,
     column_config=column_config,
     num_rows="dynamic",
     use_container_width=True,
@@ -117,70 +122,65 @@ edited_df = st.data_editor(
     key="excel_editor"
 )
 
-# SYNC & SCALE DATA
+# 5. Save the table state so it doesn't disappear
+# We check if edited_df is already a list (common in newer Streamlit versions)
+# before trying to convert it
+st.session_state.saved_df_dict = edited_df if isinstance(edited_df, list) else edited_df.to_dict('records')
+
+# ================= 🧮 SYNC, SCALE & CALCULATE (LIST VERSION) =================
 store_data = []
 total_marks = 0
 
-for _, row in edited_df.iterrows():
-    name = row["Store Name"]
+# Check if edited_df is a DataFrame or a list, then loop accordingly
+data_to_process = edited_df.to_dict('records') if hasattr(edited_df, 'to_dict') else edited_df
+
+for row in data_to_process:
+    name = row.get("Store Name", "New Store")
     
-    # SMART SCALING: If a value is between 0 and 2, we assume it's a decimal (e.g. 0.95) 
-    # and convert it to a whole percentage (95.0)
-    raw_metrics = {
-        "turnover": row["Turnover %"],
-        "studded": row["Studded %"],
-        "dmd": row["DMD %"],
-        "scheme": row["Scheme %"],
-        "dtso": row["DTSO %"]
-    }
+    # SMART SCALING: Fixes the issue where 0.92 from Excel becomes 92%
+    metrics_keys = ["Turnover %", "Studded %", "DMD %", "Scheme %", "DTSO %"]
+    s_val = {}
     
-    scaled_metrics = {}
-    for key, val in raw_metrics.items():
-        # Only scale if the value is positive and very small (like a decimal)
-        if 0 < val <= 2.0:
-            scaled_metrics[key] = round(val * 100, 2)
-        else:
-            scaled_metrics[key] = round(val, 2)
+    for k in metrics_keys:
+        val = float(row.get(k, 0.0))
+        # If the number is a decimal (e.g., 0.92), multiply by 100
+        s_val[k] = round(val * 100, 2) if 0 < val <= 2.0 else round(val, 2)
     
-    # Calculate marks using scaled values
-    mark = calculate_marks(
-        scaled_metrics["turnover"], 
-        scaled_metrics["studded"], 
-        scaled_metrics["dmd"], 
-        scaled_metrics["scheme"], 
-        scaled_metrics["dtso"]
-    )
-    
+    # Run the Mark Calculation Logic
+    mark = calculate_marks(s_val["Turnover %"], s_val["Studded %"], s_val["DMD %"], s_val["Scheme %"], s_val["DTSO %"])
     total_marks += mark
     
     store_data.append({
         "name": name,
-        "turnover": scaled_metrics["turnover"],
-        "studded": scaled_metrics["studded"],
-        "dmd": scaled_metrics["dmd"],
-        "scheme": scaled_metrics["scheme"],
-        "dtso": scaled_metrics["dtso"],
+        "turnover": s_val["Turnover %"],
+        "studded": s_val["Studded %"],
+        "dmd": s_val["DMD %"],
+        "scheme": s_val["Scheme %"],
+        "dtso": s_val["DTSO %"],
         "mark": mark
     })
 
-store_count = len(store_data) if len(store_data) > 0 else 1
-region_avg = total_marks / store_count
-# ==============================================================
+# Define variables for the rest of the dashboard
+current_store_count = len(store_data) if len(store_data) > 0 else 1
+region_avg = total_marks / current_store_count
+# =========================================================================
 
-# ---------------- REGION CALC ----------------
-region_avg = total_marks/store_count
-
+# ================= 💰 INCENTIVE & SLAB CALCULATION =================
+# Calculate the final incentive amount based on the Region Average
 incentive = 0
-for threshold,amount in slabs[designation]:
+for threshold, amount in slabs[designation]:
     if region_avg >= threshold:
         incentive = amount
         break
 
-thresholds = sorted([t for t,_ in slabs[designation]])
-next_threshold = next((t for t in thresholds if t>region_avg),None)
+# Find the next slab to calculate the 'Gap'
+thresholds = sorted([t for t, _ in slabs[designation]])
+next_threshold = next((t for t in thresholds if t > region_avg), None)
 
-gap = next_threshold-region_avg if next_threshold else 0
-required_total = gap*store_count if gap>0 else 0
+# Calculate the gap and total marks required to unlock the next level
+gap = next_threshold - region_avg if next_threshold else 0
+required_total = gap * current_store_count if gap > 0 else 0
+# ===================================================================
 
 # ================= TOP SNAPSHOT =================
 st.markdown("## 📊 Regional Snapshot")
@@ -286,55 +286,41 @@ if gap > 0:
     table_rows = []
     metrics = ["turnover", "studded", "dmd", "scheme", "dtso"]
     display_names = ["Turnover", "Studded %", "DMD %", "Scheme %", "DTSO %"]
-    # These are your system's scoring milestones
     milestones = [75, 80, 90, 100]
 
     for store in store_data:
         row = [store["name"]]
-        
         for metric in metrics:
             actual = store[metric]
-            row.append(f"{actual}%") # Show current Actual
+            row.append(f"{actual}%")
             
-            # Find the NEXT milestone above the current achievement
-            next_milestone = None
-            for m in milestones:
-                if m > actual:
-                    next_milestone = m
-                    break
+            # Milestone logic
+            next_milestone = next((m for m in milestones if m > actual), None)
             
             if next_milestone:
-                # Simulate the marks gained by hitting this next milestone
                 sim = {m: store[m] for m in metrics}
                 sim[metric] = next_milestone
                 new_mark = calculate_marks(sim["turnover"], sim["studded"], sim["dmd"], sim["scheme"], sim["dtso"])
                 gain = round(new_mark - store["mark"], 1)
-                
-                target_display = f"{next_milestone}% (+{gain} marks)"
+                target_display = f"{next_milestone}% (+{gain})"
             else:
-                target_display = "Max Slab Reached"
+                target_display = "Maxed"
             
             row.append(target_display)
         
-        # Contribution to the current average
-        row.append(round(store["mark"] / store_count, 2))
+        # Aligned with 'for metric' to add the row after all metrics are checked
+        row.append(round(store["mark"] / current_store_count, 2))
         table_rows.append(row)
         
-    # Headers matching your manual design
+    # Aligned with 'for store' to build the table after all stores are processed
     top_level = ["Location Name"] + [item for sublist in [[m, m] for m in display_names] for item in sublist] + ["Contribution"]
-    sub_level = [" "] + ["Actual", "Next Milestone"] * 5 + ["to Region Avg"]
+    sub_level = [" "] + ["Actual", "Next Goal"] * 5 + ["to Region"]
     
     col_tuples = list(zip(top_level, sub_level))
     columns = pd.MultiIndex.from_tuples(col_tuples)
     
-    df = pd.DataFrame(table_rows, columns=columns)
-    
-    # Display the interactive table
-    st.dataframe(df, use_container_width=True, hide_index=True)
-    st.info(f"💡 Total regional marks needed to reach next slab: **{round(required_total, 2)}**")
-
-else:
-    st.success("🏆 Region is already at the highest slab!")
+    df_milestone = pd.DataFrame(table_rows, columns=columns)
+    st.dataframe(df_milestone, use_container_width=True, hide_index=True)
 
 # ================= PERFORMANCE INSIGHT =================
 st.markdown("## 📈 Performance Insight")
@@ -402,22 +388,19 @@ with col_gap:
 # ================= DETAILS =================
 with st.expander("📊 Contribution Ranking (Detailed View)"):
     for s in sorted(store_data, key=lambda x: x["mark"], reverse=True):
-        contribution = round(s["mark"]/store_count,2)
+        contribution = round(s["mark"]/current_store_count,2)
         st.write(f"{s['name']} | Mark: {s['mark']} | Contribution: {contribution}")
 
-# ---------------- AUTO SAVE TO BROWSER (CRASH-PROOF VERSION) ----------------
-# We only save raw data (numbers, text, lists). 
-# We explicitly EXCLUDE the "excel_editor" system objects that cause the crash.
+# ---------------- AUTO SAVE (STRICT) ----------------
 try:
     save_data = {}
     for k, v in st.session_state.items():
-        # Only save keys that are NOT related to the editor UI state
-        if k != "excel_editor" and not k.startswith("_"):
-            # Only save simple data types (text, numbers, booleans, lists, or simple dicts)
-            if isinstance(v, (str, int, float, bool, list, dict)):
-                save_data[k] = v
+        # Exclude technical widgets that cause crashes
+        if k == "excel_editor" or k.startswith("_"):
+            continue
+        if isinstance(v, (str, int, float, bool, list, dict)):
+            save_data[k] = v
     
     local_storage.setItem("region_data", save_data)
-except Exception as e:
-    # This prevents the app from stopping if a save error occurs
-    st.sidebar.error(f"Save Warning: {e}")
+except:
+    pass
