@@ -192,90 +192,65 @@ col3.metric("Gap to Next Slab", round(gap,2))
 col4.metric("Marks Required", round(required_total,2))
 
 
-# ================= STRATEGIC FOCUS =================
-st.markdown("## 🎯 Strategic Focus")
+# ================= 🚀 PRIORITY GAP CLOSER (REPLACES MULTI-STORE) =================
+st.markdown("## 🚀 Priority Gap Closer Strategy")
+st.write(f"Targets to bridge the **{round(gap, 2)}** point regional gap, prioritized by weightage.")
 
-col_left, col_right = st.columns([2,1])
+if gap > 0:
+    # 1. Define Priority Weights (As per your request)
+    # Turnover (Highest) -> Scheme -> DTSO -> Studded -> DMD (Lowest)
+    priority_order = ["turnover", "scheme", "dtso", "studded", "dmd"]
+    priority_labels = {
+        "turnover": "Turnover", "scheme": "Scheme %", 
+        "dtso": "DTSO %", "studded": "Studded %", "dmd": "DMD %"
+    }
 
-with col_left:
-    st.markdown("### Multi-Store Unlock Strategy")
+    # 2. Gather all possible improvements across all stores
+    potential_moves = []
+    milestones = [75, 80, 90, 100]
 
-    if gap > 0:
-        slab_targets = [75, 80, 90, 100]
-        priority_metrics = ["turnover", "scheme", "dtso", "studded", "dmd"]
+    for store in store_data:
+        for metric in priority_order:
+            actual = store[metric]
+            next_m = next((m for m in milestones if m > actual), None)
+            
+            if next_m:
+                # Calculate mark gain
+                sim = {m: store[m] for m in priority_order}
+                sim[metric] = next_m
+                new_mark = calculate_marks(sim["turnover"], sim["studded"], sim["dmd"], sim["scheme"], sim["dtso"])
+                gain = new_mark - store["mark"]
+                
+                if gain > 0:
+                    potential_moves.append({
+                        "Store": store["name"],
+                        "Metric": priority_labels[metric],
+                        "Move": f"{actual}% → {next_m}%",
+                        "Mark Gain": round(gain, 1),
+                        "Regional Impact": round(gain / current_store_count, 2),
+                        "Priority": priority_order.index(metric) # Lower index = Higher priority
+                    })
 
-        strategy_found = False
+    # 3. Sort by Priority first, then by the highest impact
+    sorted_moves = sorted(potential_moves, key=lambda x: (x["Priority"], -x["Regional Impact"]))
 
-        for r in [2, 3]:
-            for combo in itertools.combinations(store_data, r):
-
-                improvement_total = 0
-                actions = []
-
-                for store in combo:
-
-                    best_improvement = 0
-                    best_action = None
-
-                    for metric in priority_metrics:
-
-                        current = store[metric]
-
-                        for target in slab_targets:
-
-                            if target > current:
-
-                                new_mark = calculate_marks(
-                                    target if metric == "turnover" else store["turnover"],
-                                    target if metric == "studded" else store["studded"],
-                                    target if metric == "dmd" else store["dmd"],
-                                    target if metric == "scheme" else store["scheme"],
-                                    target if metric == "dtso" else store["dtso"],
-                                )
-
-                                improvement = new_mark - store["mark"]
-
-                                if improvement > best_improvement:
-                                    best_improvement = improvement
-                                    best_action = (
-                                        store["name"],
-                                        metric.upper(),
-                                        current,
-                                        target,
-                                    )
-
-                    if best_action:
-                        improvement_total += best_improvement
-                        actions.append(best_action)
-
-                if improvement_total >= required_total:
-                    for action in actions:
-                        st.info(
-                            f"{action[0]} improves {action[1]} "
-                            f"{action[2]}% → {action[3]}%"
-                        )
-
-                    st.success("👉 Combined improvement unlocks next slab")
-                    strategy_found = True
-                    break
-
-            if strategy_found:
-                break
-
-        if not strategy_found:
-            st.warning("No 2–3 store combination sufficient. Structural uplift required.")
-
+    if sorted_moves:
+        # Display as a clean, actionable table
+        df_strategy = pd.DataFrame(sorted_moves).drop(columns=["Priority"])
+        
+        # We only show the top moves needed to cover the gap
+        st.dataframe(
+            df_strategy.head(10), 
+            use_container_width=True, 
+            hide_index=True
+        )
+        
+        st.success(f"💡 Focus on these top **Turnover** and **Scheme** moves first to unlock the next slab efficiently.")
     else:
-        st.success("Highest slab achieved")
-
-
-with col_right:
-    st.markdown("### 🔴 Top 3 Risk Stores")
-
-    sorted_stores = sorted(store_data, key=lambda x: x["mark"])
-
-    for s in sorted_stores[:3]:
-        st.error(f"{s['name']} | {s['mark']}")
+        st.warning("No immediate single-metric moves found. Stores may need to improve multiple metrics simultaneously.")
+else:
+    st.balloons()
+    st.success("Region has already unlocked the maximum slab!")
 
 
 # ================= PROACTIVE MILESTONE MATRIX =================
