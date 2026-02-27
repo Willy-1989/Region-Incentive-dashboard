@@ -89,32 +89,83 @@ store_count = st.slider("Number of Stores",1,20,10)
 total_marks = 0
 store_data = []
 
-for i in range(store_count):
+# ================= NEW DATA ENTRY (EXCEL STYLE - SCALE FIXED) =================
+st.markdown("## 📥 Bulk Data Entry")
+st.info("💡 You can copy rows from Excel (Cmd+C) and paste them directly into the first cell (Cmd+V).")
 
-    name = st.text_input(f"Store Name {i+1}", key=f"name_{i}")
-    col1,col2,col3,col4,col5 = st.columns(5)
+column_config = {
+    "Store Name": st.column_config.TextColumn("Store Name", default="New Store", required=True),
+    "Turnover %": st.column_config.NumberColumn("Turnover %", min_value=0.0, max_value=200.0, format="%.1f%%"),
+    "Studded %": st.column_config.NumberColumn("Studded %", min_value=0.0, max_value=200.0, format="%.1f%%"),
+    "DMD %": st.column_config.NumberColumn("DMD %", min_value=0.0, max_value=200.0, format="%.1f%%"),
+    "Scheme %": st.column_config.NumberColumn("Scheme %", min_value=0.0, max_value=200.0, format="%.1f%%"),
+    "DTSO %": st.column_config.NumberColumn("DTSO %", min_value=0.0, max_value=200.0, format="%.1f%%"),
+}
 
-    t = col1.number_input("Turnover %",0.0,200.0,key=f"turn_{i}")
-    s = col2.number_input("Studded %",0.0,200.0,key=f"stud_{i}")
-    d = col3.number_input("DMD %",0.0,200.0,key=f"dmd_{i}")
-    sc = col4.number_input("Scheme %",0.0,200.0,key=f"scheme_{i}")
-    dt = col5.number_input("DTSO %",0.0,200.0,key=f"dtso_{i}")
+if 'input_df' not in st.session_state:
+    st.session_state.input_df = pd.DataFrame(
+        [{"Store Name": f"Store {i+1}", "Turnover %": 0.0, "Studded %": 0.0, "DMD %": 0.0, "Scheme %": 0.0, "DTSO %": 0.0} 
+         for i in range(store_count)]
+    )
 
-    mark = calculate_marks(t,s,d,sc,dt)
+edited_df = st.data_editor(
+    st.session_state.input_df,
+    column_config=column_config,
+    num_rows="dynamic",
+    use_container_width=True,
+    hide_index=True,
+    key="excel_editor"
+)
+
+# SYNC & SCALE DATA
+store_data = []
+total_marks = 0
+
+for _, row in edited_df.iterrows():
+    name = row["Store Name"]
+    
+    # SMART SCALING: If a value is between 0 and 2, we assume it's a decimal (e.g. 0.95) 
+    # and convert it to a whole percentage (95.0)
+    raw_metrics = {
+        "turnover": row["Turnover %"],
+        "studded": row["Studded %"],
+        "dmd": row["DMD %"],
+        "scheme": row["Scheme %"],
+        "dtso": row["DTSO %"]
+    }
+    
+    scaled_metrics = {}
+    for key, val in raw_metrics.items():
+        # Only scale if the value is positive and very small (like a decimal)
+        if 0 < val <= 2.0:
+            scaled_metrics[key] = round(val * 100, 2)
+        else:
+            scaled_metrics[key] = round(val, 2)
+    
+    # Calculate marks using scaled values
+    mark = calculate_marks(
+        scaled_metrics["turnover"], 
+        scaled_metrics["studded"], 
+        scaled_metrics["dmd"], 
+        scaled_metrics["scheme"], 
+        scaled_metrics["dtso"]
+    )
+    
     total_marks += mark
-
+    
     store_data.append({
-    "name": name if name else f"Store {i+1}",
-    "turnover": t,
-    "studded": s,
-    "dmd": d,
-    "scheme": sc,
-    "dtso": dt,
-    "mark": mark
-})
+        "name": name,
+        "turnover": scaled_metrics["turnover"],
+        "studded": scaled_metrics["studded"],
+        "dmd": scaled_metrics["dmd"],
+        "scheme": scaled_metrics["scheme"],
+        "dtso": scaled_metrics["dtso"],
+        "mark": mark
+    })
 
-    st.metric("Store Mark", mark)
-    st.markdown("---")
+store_count = len(store_data) if len(store_data) > 0 else 1
+region_avg = total_marks / store_count
+# ==============================================================
 
 # ---------------- REGION CALC ----------------
 region_avg = total_marks/store_count
@@ -354,8 +405,19 @@ with st.expander("📊 Contribution Ranking (Detailed View)"):
         contribution = round(s["mark"]/store_count,2)
         st.write(f"{s['name']} | Mark: {s['mark']} | Contribution: {contribution}")
 
-# ---------------- AUTO SAVE TO BROWSER (FIXED) ----------------
-# We filter the session state to only save data (strings, numbers, lists) 
-# and ignore complex system objects that cause the "Circular Reference" error.
-save_data = {k: v for k, v in st.session_state.items() if isinstance(v, (str, int, float, bool, list, dict))}
-local_storage.setItem("region_data", save_data)
+# ---------------- AUTO SAVE TO BROWSER (CRASH-PROOF VERSION) ----------------
+# We only save raw data (numbers, text, lists). 
+# We explicitly EXCLUDE the "excel_editor" system objects that cause the crash.
+try:
+    save_data = {}
+    for k, v in st.session_state.items():
+        # Only save keys that are NOT related to the editor UI state
+        if k != "excel_editor" and not k.startswith("_"):
+            # Only save simple data types (text, numbers, booleans, lists, or simple dicts)
+            if isinstance(v, (str, int, float, bool, list, dict)):
+                save_data[k] = v
+    
+    local_storage.setItem("region_data", save_data)
+except Exception as e:
+    # This prevents the app from stopping if a save error occurs
+    st.sidebar.error(f"Save Warning: {e}")
