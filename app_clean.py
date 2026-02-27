@@ -290,37 +290,56 @@ if gap > 0:
 
     for store in store_data:
         row = [store["name"]]
+        total_potential_gain = 0 # Track total marks this store can add
+        
         for metric in metrics:
             actual = store[metric]
             row.append(f"{actual}%")
             
-            # Milestone logic
-            next_milestone = next((m for m in milestones if m > actual), None)
+            # Find next target
+            next_m = next((m for m in milestones if m > actual), None)
             
-            if next_milestone:
-                sim = {m: store[m] for m in metrics}
-                sim[metric] = next_milestone
+            if next_m:
+                # Calculate what the marks would be at that target
+                sim = {m: store[m] for m in metrics}; sim[metric] = next_m
                 new_mark = calculate_marks(sim["turnover"], sim["studded"], sim["dmd"], sim["scheme"], sim["dtso"])
-                gain = round(new_mark - store["mark"], 1)
-                target_display = f"{next_milestone}% (+{gain})"
+                
+                # The 'gain' for this specific metric
+                metric_gain = new_mark - store["mark"]
+                row.append(f"{next_m}% (+{round(metric_gain, 1)})")
+                
+                # Add to the store's total potential contribution to the region
+                # Potential Gain to Region Avg = (New Marks - Old Marks) / Total Stores
+                total_potential_gain += (metric_gain / current_store_count)
             else:
-                target_display = "Maxed"
-            
-            row.append(target_display)
+                row.append("MAX")
         
-        # Aligned with 'for metric' to add the row after all metrics are checked
-        row.append(round(store["mark"] / current_store_count, 2))
+        # This is the 'Unlocked Value' for the Regional Average
+        row.append(round(total_potential_gain, 2))
         table_rows.append(row)
         
-    # Aligned with 'for store' to build the table after all stores are processed
-    top_level = ["Location Name"] + [item for sublist in [[m, m] for m in display_names] for item in sublist] + ["Contribution"]
-    sub_level = [" "] + ["Actual", "Next Goal"] * 5 + ["to Region"]
+    # --- TABLE RENDERING WITH COLOR ---
+    top_level = ["Location Name"] + [item for sublist in [[m, m] for m in display_names] for item in sublist] + ["Potential Unlock"]
+    sub_level = [" "] + ["Actual", "Target"] * 5 + ["to Region Avg"]
     
     col_tuples = list(zip(top_level, sub_level))
     columns = pd.MultiIndex.from_tuples(col_tuples)
     
     df_milestone = pd.DataFrame(table_rows, columns=columns)
-    st.dataframe(df_milestone, use_container_width=True, hide_index=True)
+
+    # Adding Color Variance (Conditional Formatting)
+    # We highlight the 'Potential Unlock' column to show where the biggest impact is
+    def highlight_gain(val):
+        color = 'background-color: #2e7d32; color: white' if val > 0.5 else '' # Dark green for high impact
+        if 0 < val <= 0.5: color = 'background-color: #ffc107; color: black' # Amber for medium
+        return color
+
+    st.write("### 🚀 Strategic Unlock Matrix")
+    st.dataframe(
+        df_milestone.style.applymap(highlight_gain, subset=[columns[-1]]), 
+        use_container_width=True, 
+        hide_index=True
+    )
 
 # ================= PERFORMANCE INSIGHT =================
 st.markdown("## 📈 Performance Insight")
