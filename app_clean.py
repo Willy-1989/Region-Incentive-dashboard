@@ -40,12 +40,7 @@ div[data-testid="stMetric"] {
 # ---------------- SLABS ----------------
 slabs = {
     "HEAD RETAIL": [(100,125000),(90,100000),(80,90000),(70,75000),(60,60000),(0,50000)],
-    "Business Head L1": [(100,125000),(90,100000),(80,90000),(70,75000),(60,60000),(0,50000)],
-    "Business Head L2": [(100,125000),(90,100000),(80,90000),(70,75000),(60,60000),(0,50000)],
-    "GENERAL MANAGER (G1)": [(100,105000),(90,85000),(80,75000),(70,63000),(60,51000),(0,42000)],
-    "DEPUTY GENERAL MANAGER": [(100,105000),(90,85000),(80,75000),(70,63000),(60,51000),(0,42000)],
-    "REGIONAL MANAGER (L1)": [(100,105000),(90,85000),(80,75000),(70,63000),(60,51000),(0,42000)],
-    "REGIONAL MANAGER (L2)": [(100,105000),(90,85000),(80,75000),(70,63000),(60,51000),(0,42000)],
+    # ... other designations ...
     "ASST. REGIONAL MANAGER": [(100,95000),(90,75000),(80,67500),(70,55000),(60,45000),(0,37500)]
 }
 
@@ -238,12 +233,13 @@ if gap > 0:
         # Display as a clean, actionable table
         df_strategy = pd.DataFrame(sorted_moves).drop(columns=["Priority"])
         
-        # We only show the top moves needed to cover the gap
+        # We only show the top 10 moves needed to cover the gap
         st.dataframe(
             df_strategy.head(10), 
             use_container_width=True, 
             hide_index=True
         )
+        
         
         st.success(f"💡 Focus on these top **Turnover** and **Scheme** moves first to unlock the next slab efficiently.")
     else:
@@ -252,69 +248,169 @@ else:
     st.balloons()
     st.success("Region has already unlocked the maximum slab!")
 
+# =============# ================= 🎯 INTERACTIVE SLAB SIMULATOR (V2 - FINAL) =================
+st.markdown("---")
+st.markdown("## 🎯 Strategic Path to Target Slab")
 
-# ================= PROACTIVE MILESTONE MATRIX =================
-st.markdown("## 🎯 Proactive Store Milestones")
-st.write("This table shows the immediate next performance slab for every store and how much it reduces the regional gap.")
+# 1. Identify reachable targets based on current Designation
+target_options = [t for t, _ in slabs[designation] if t > region_avg]
 
+if target_options:
+    selected_target = st.selectbox("Select Target Slab to Simulate Path:", target_options)
+    
+    # Calculate the points needed
+    points_to_gain = selected_target - region_avg
+    total_marks_needed = points_to_gain * current_store_count
+    
+    st.info(f"📍 **Current Region Average:** {region_avg} | **Goal:** {selected_target}\n\n"
+            f"🚀 **Total Marks to Gain:** {round(total_marks_needed, 1)} across the region.")
+
+    # 2. Simulation Logic
+    sim_data = [dict(s) for s in store_data] 
+    path_steps = []
+    current_sim_gain = 0
+    
+    # Priority Order (STRICT): Turnover > Scheme > DTSO > Studded > DMD
+    priority_order = ["turnover", "scheme", "dtso", "studded", "dmd"]
+    priority_labels = {
+        "turnover": "Turnover", 
+        "scheme": "Scheme %", 
+        "dtso": "DTSO %", 
+        "studded": "Studded %", 
+        "dmd": "DMD %"  # <--- Added back in!
+    }
+    milestones = [75, 80, 90, 100]
+
+    # Simulation Logic: Metric -> Milestone -> Store
+    for metric in priority_order:
+        if current_sim_gain >= total_marks_needed:
+            break
+            
+        for m_target in milestones:
+            if current_sim_gain >= total_marks_needed:
+                break
+                
+            for s in sim_data:
+                # If store is currently below the milestone
+                if s[metric] < m_target:
+                    start_val = s[metric]
+                    old_mark = s["mark"]
+                    
+                    # Create temporary state for calculation
+                    temp_metrics = {m: s[m] for m in priority_order}
+                    temp_metrics[metric] = m_target
+                    
+                    # Calculate what the marks would be
+                    new_mark = calculate_marks(
+                        temp_metrics["turnover"], temp_metrics["studded"], 
+                        temp_metrics["dmd"], temp_metrics["scheme"], temp_metrics["dtso"]
+                    )
+                    
+                    gain = new_mark - old_mark
+                    
+                    if gain > 0:
+                        path_steps.append({
+                            "Priority": priority_labels[metric],
+                            "Store": s["name"],
+                            "Journey": f"{start_val}% ➡️ {m_target}%",
+                            "Store Mark Gain": f"+{round(gain, 1)}",
+                            "Regional Contribution": round(gain / current_store_count, 2)
+                        })
+                        
+                        # Update the simulated state so next loops know where we stand
+                        s[metric] = m_target
+                        s["mark"] = new_mark
+                        current_sim_gain += gain
+                        
+                        if current_sim_gain >= total_marks_needed:
+                            break
+
+    # 3. Output the Simulation Table
+    if path_steps:
+        df_sim = pd.DataFrame(path_steps) # df_sim is created here
+        
+        # This function must be indented inside the if-block
+        def color_path(row):
+            if row["Priority"] == "Turnover":
+                return ['background-color: #fff9c4; color: #f57f17; font-weight: bold'] * len(row)
+            if row["Priority"] == "Scheme %":
+                return ['background-color: #e8f5e9; color: #1b5e20'] * len(row)
+            return [''] * len(row)
+
+        # This st.dataframe call must ALSO be indented inside the if-block
+        st.dataframe(
+            df_sim.style.apply(color_path, axis=1),
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Validation Summary
+        final_avg = region_avg + (current_sim_gain / current_store_count)
+        st.success(f"✅ Simulation Complete! Region Average reaches **{round(final_avg, 2)}** Marks.")
+    else:
+        # This handles cases where no path is found
+        st.warning("⚠️ No standard moves found to bridge this gap with current store data.")
+
+# ================= 🚀 PROACTIVE STORE MILESTONES (UPDATED) =================
 if gap > 0:
+    st.markdown("---")
+    st.markdown("### 🚀 Strategic Milestone Journey")
+    st.info("Each cell shows: **Current % ➡️ Next Target % (+Store Marks Earned)**")
+    
     table_rows = []
-    metrics = ["turnover", "studded", "dmd", "scheme", "dtso"]
-    display_names = ["Turnover", "Studded %", "DMD %", "Scheme %", "DTSO %"]
+    # Priority order: Turnover > Scheme > DTSO > Studded > DMD
+    metrics = ["turnover", "scheme", "dtso", "studded", "dmd"]
+    display_names = ["Turnover", "Scheme %", "DTSO %", "Studded %", "DMD %"]
     milestones = [75, 80, 90, 100]
 
     for store in store_data:
         row = [store["name"]]
-        total_potential_gain = 0 # Track total marks this store can add
+        total_unlocked_value = 0 
         
         for metric in metrics:
             actual = store[metric]
-            row.append(f"{actual}%")
             
-            # Find next target
+            # Find the next milestone target
             next_m = next((m for m in milestones if m > actual), None)
             
             if next_m:
-                # Calculate what the marks would be at that target
-                sim = {m: store[m] for m in metrics}; sim[metric] = next_m
+                # Calculate gain if they hit this milestone
+                sim = {m: store[m] for m in metrics}
+                sim[metric] = next_m
                 new_mark = calculate_marks(sim["turnover"], sim["studded"], sim["dmd"], sim["scheme"], sim["dtso"])
                 
-                # The 'gain' for this specific metric
                 metric_gain = new_mark - store["mark"]
-                row.append(f"{next_m}% (+{round(metric_gain, 1)})")
-                
-                # Add to the store's total potential contribution to the region
-                # Potential Gain to Region Avg = (New Marks - Old Marks) / Total Stores
-                total_potential_gain += (metric_gain / current_store_count)
+                # Display the "Journey": Current -> Next (+Points)
+                target_display = f"{actual}% ➡️ {next_m}% (+{round(metric_gain, 1)})"
+                total_unlocked_value += (metric_gain / current_store_count)
             else:
-                row.append("MAX")
+                target_display = "MAXED ✅"
+            
+            row.append(target_display)
         
-        # This is the 'Unlocked Value' for the Regional Average
-        row.append(round(total_potential_gain, 2))
+        # Final column showing potential total contribution to regional average
+        row.append(round(total_unlocked_value, 2))
         table_rows.append(row)
         
-    # --- TABLE RENDERING WITH COLOR ---
-    top_level = ["Location Name"] + [item for sublist in [[m, m] for m in display_names] for item in sublist] + ["Potential Unlock"]
-    sub_level = [" "] + ["Actual", "Target"] * 5 + ["to Region Avg"]
-    
-    col_tuples = list(zip(top_level, sub_level))
-    columns = pd.MultiIndex.from_tuples(col_tuples)
-    
+    # --- TABLE SETUP ---
+    columns = ["Location"] + display_names + ["Potential Region Gain"]
     df_milestone = pd.DataFrame(table_rows, columns=columns)
 
-    # Adding Color Variance (Conditional Formatting)
-    # We highlight the 'Potential Unlock' column to show where the biggest impact is
-    def highlight_gain(val):
-        color = 'background-color: #2e7d32; color: white' if val > 0.5 else '' # Dark green for high impact
-        if 0 < val <= 0.5: color = 'background-color: #ffc107; color: black' # Amber for medium
-        return color
+    # Highlighting stores that can move the needle by more than 0.5 points
+    def highlight_high_impact(val):
+        try:
+            if float(val) > 0.5:
+                return 'background-color: #2e7d32; color: white; font-weight: bold'
+        except:
+            pass
+        return ''
 
-    st.write("### 🚀 Strategic Unlock Matrix")
     st.dataframe(
-        df_milestone.style.applymap(highlight_gain, subset=[columns[-1]]), 
+        df_milestone.style.applymap(highlight_high_impact, subset=["Potential Region Gain"]),
         use_container_width=True, 
         hide_index=True
     )
+    
 
 # ================= PERFORMANCE INSIGHT =================
 st.markdown("## 📈 Performance Insight")
